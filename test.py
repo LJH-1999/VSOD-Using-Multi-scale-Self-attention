@@ -174,7 +174,7 @@ class Transformer(nn.Module):
         self.layers = nn.ModuleList([])
         for _ in range(depth // 2):
             self.layers.append(nn.ModuleList([
-                Residual(PreNorm(dim, Attention2(dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0., sr_ratio=2))),
+                Residual(PreNorm(dim, Attention2(dim, num_heads=4, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0., sr_ratio=2))),
                 Residual(PreNorm(dim, FeedForward(dim, mlp_dim, dropout=dropout)))
             ]))
         for _ in range(depth // 2, depth):
