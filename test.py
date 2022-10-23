@@ -216,4 +216,4 @@ print(x.shape)
 transformer = Transformer(512,4,4,782,group=5,dropout=0.)
 x = transformer.forward(x=torch.randn(size=(40,512,28,28)))
 print(x.shape)
-# test1
+# test branch 0.4
