@@ -101,5 +101,4 @@ if __name__ == '__main__':
     p3.start()
     time.sleep(2)
 
-    train(net, device, q, log_txt_file, val_datapath, models_train_best, models_train_last, lr, lr_de, epochs,
-          log_interval, val_interval)
+    train(net, device, q, log_txt_file, val_datapath, models_train_best, models_train_last, lr, lr_de, epochs, log_interval, val_interval)

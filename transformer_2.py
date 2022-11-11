@@ -168,13 +168,47 @@ class Attention2(nn.Module):
         return x
 
 
-class Transformer(nn.Module):
+class Transformer2(nn.Module):
     def __init__(self, dim, depth, heads, mlp_dim, group=5, dropout=0.):
         super().__init__()
         self.layers = nn.ModuleList([])
         for _ in range(depth // 2):
             self.layers.append(nn.ModuleList([
                 Residual(PreNorm(dim, Attention2(dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0., sr_ratio=2))),
+                Residual(PreNorm(dim, FeedForward(dim, mlp_dim, dropout=dropout)))
+            ]))
+        for _ in range(depth // 2, depth):
+            self.layers.append(nn.ModuleList([
+                Residual(PreNorm(dim, Attention(dim, heads=heads, dropout=dropout))),
+                Residual(PreNorm(dim, FeedForward(dim, mlp_dim, dropout=dropout)))
+            ]))
+        self.group = group
+
+    def forward(self, x):
+        bs_gp, dim, wid, hei = x.shape[0], x.shape[1], x.shape[2], x.shape[3]
+        bs = bs_gp // self.group
+        gp = self.group
+        x = x.reshape(bs, gp, dim, wid, hei)
+        x = x.permute(0, 1, 3, 4, 2).reshape(bs, gp * wid * hei, dim)
+
+        for attn, ff in self.layers[:2]:
+            x = attn(x, num_frame=gp, H=hei, W=wid)
+            x = ff(x)
+        for attn, ff in self.layers[2:]:
+            x = attn(x)
+            x = ff(x)
+
+        x = x.reshape(bs, gp, wid, hei, dim).permute(0, 1, 4, 2, 3).reshape(bs_gp, dim, wid, hei)
+
+        return x
+
+class Transformer3(nn.Module):
+    def __init__(self, dim, depth, heads, mlp_dim, group=5, dropout=0.):
+        super().__init__()
+        self.layers = nn.ModuleList([])
+        for _ in range(depth // 2):
+            self.layers.append(nn.ModuleList([
+                Residual(PreNorm(dim, Attention2(dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0., sr_ratio=4))),
                 Residual(PreNorm(dim, FeedForward(dim, mlp_dim, dropout=dropout)))
             ]))
         for _ in range(depth // 2, depth):

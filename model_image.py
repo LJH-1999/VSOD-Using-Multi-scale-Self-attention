@@ -7,6 +7,7 @@ import numpy
 from einops import rearrange
 import time
 from transformer import Transformer
+from transformer_2 import Transformer2, Transformer3
 from Intra_MLP import index_points, knn_l2
 
 # vgg choice
@@ -139,7 +140,8 @@ class Model(nn.Module):
         self.group_size = 5
         self.intra = nn.ModuleList(intra)
         self.transformer_1=Transformer(512,4,4,782,group=self.group_size)
-        self.transformer_2=Transformer(512,4,4,782,group=self.group_size)
+        self.transformer_2=Transformer2(512,4,4,782,group=self.group_size)
+        self.transformer_3=Transformer3(512,4,4,782,group=self.group_size)
         self.demo_mode=demo_mode
 
     def forward(self, x):
@@ -162,7 +164,9 @@ class Model(nn.Module):
                 newp_T.append(tmp_newp_T3)
             if k == 2:
                 newp_T.append(self.transformer_2(newp[k]))
-            if k < 2:
+            if k == 1:
+                newp_T.append(self.transformer_3(newp[k]))
+            if k < 1:
                 newp_T.append(None)
 
         # intra-MLP
@@ -214,6 +218,7 @@ class Model(nn.Module):
         spa_4 = spa_4.expand_as(g4)
 
         y4 = newp_T[3] * g4 + spa_4
+
         for k in range(len(self.concat4)):
             y4 = self.concat4[k](y4)
 
@@ -224,12 +229,13 @@ class Model(nn.Module):
             if k == 1:
                 y3 = y3 + y4
 
-        y2 = newp[1] * g2 + spa_2
+        y2 = newp_T[1] * g2 + spa_2
 
         for k in range(len(self.concat2)):
             y2 = self.concat2[k](y2)
             if k == 1:
                 y2 = y2 + y3
+
         y1 = newp[0] * g1 + spa_1
 
         for k in range(len(self.concat1)):
