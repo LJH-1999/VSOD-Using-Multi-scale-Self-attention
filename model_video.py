@@ -240,7 +240,7 @@ class Model(nn.Module):
         else:
             return cls_pred, mask_pred
 
-    # build the whole network
+# build the whole network
 def build_model(device,demo_mode=False):
     return Model(device,
                  vgg(base['vgg']),
