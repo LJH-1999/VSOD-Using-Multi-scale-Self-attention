@@ -170,7 +170,7 @@ class Model(nn.Module):
         spa_mask = self.intra[1](intra_mask)
 
         # hsp
-        x = newp[3]
+        x = newp[3]       #vgg  feature layer4
         x = self.sp1(x)
         x = x.view(-1, x.size(1), x.size(2) * x.size(3))
         x = torch.bmm(x, x.transpose(1, 2))
