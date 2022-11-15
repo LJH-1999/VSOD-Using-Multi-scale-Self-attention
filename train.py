@@ -3,21 +3,20 @@ from torch.optim import Adam
 from tools import custom_print
 import datetime
 import torch
-from val import validation, validation_with_flow
+from val import validation,validation_with_flow
 from torch.utils.data import DataLoader
 from data_processed import VideoDataset
-
 
 def train(net, device, q, log_txt_file, val_datapath, models_train_best, models_train_last, lr=1e-4, lr_de_epoch=25000,
           epochs=100000, log_interval=100, val_interval=1000):
     optimizer = Adam(net.parameters(), lr, weight_decay=1e-6)
-    loss = Loss().cuda()
-    best_p, best_j = 0, 1
+    loss = Loss.cuda()
+    best_p, best_j = 0,1
     ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss = 0, 0, 0, 0, 0
-    for epoch in range(1, epochs + 1):
+    for epoch in range(1, epochs+1):
         img, cls_gt, mask_gt = q.get()
         net.zero_grad()
-        img, cls_gt, mask_gt = img.cuda(), cls_gt.cuda(), mask_gt.cuda()
+        img, cls_gt, mask_gt = img.cuda(), cls_gt.cuda, mask_gt.cuda()
 
         pred_cls, pred_mask = net(img)
         all_loss, m_loss, c_loss, s_loss, iou_loss = loss(pred_mask, mask_gt, pred_cls, cls_gt)
@@ -42,21 +41,17 @@ def train(net, device, q, log_txt_file, val_datapath, models_train_best, models_
             ave_i_loss = ave_i_loss / log_interval
             custom_print(datetime.datetime.now().strftime('%F %T') +
                          ' lr: %e, epoch: [%d/%d], all_loss: [%.4f], m_loss: [%.4f], c_loss: [%.4f], s_loss: [%.4f], i_loss: [%.4f]' %
-                         (lr, epoch, epochs, ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss), log_txt_file,
-                         'a+')
+                         (lr, epoch, epochs, ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss), log_txt_file, 'a+')
             ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss = 0, 0, 0, 0, 0
 
         if epoch % val_interval == 0:
             net.eval()
             with torch.no_grad():
-                custom_print(datetime.datetime.now().strftime('%F %T') +
-                             ' now is evaluating the coseg dataset', log_txt_file, 'a+')
-                ave_p, ave_j = validation(net, val_datapath, device, group_size=5, img_size=224, img_dir_name='image',
-                                          gt_dir_name='groundtruth',
-                                          img_ext=['.jpg', '.jpg', '.jpg', '.jpg'],
-                                          gt_ext=['.png', '.bmp', '.jpg', '.png'])
+                custom_print(datetime.datetime.now().strftime('%F %T') + ' now is evaluating the coseg dataset', log_txt_file, 'a+')
+                ave_p, ave_j = validation(net, val_datapath, device, group_size=5, img_size=224, img_dir_name='image', gt_dir_name='groundtruth',
+                                         img_ext=['.jpg', '.jpg', '.jpg', '.jpg'], gt_ext=['.png', '.bmp', '.jpg', '.png'])
                 if ave_p[3] > best_p:
-                    # follow yourself save condition
+                    # follow yourself save condition /PASCAL_VOC
                     best_p = ave_p[3]
                     best_j = ave_j[0]
                     torch.save(net.state_dict(), models_train_best)
@@ -71,22 +66,19 @@ def train(net, device, q, log_txt_file, val_datapath, models_train_best, models_
                 custom_print(datetime.datetime.now().strftime('%F %T') + ' PAS_VOC  p: [%.4f], j: [%.4f]' %
                              (ave_p[3], ave_j[3]), log_txt_file, 'a+')
                 custom_print('-' * 100, log_txt_file, 'a+')
-            net.train()
+                net.train()
 
         if epoch % lr_de_epoch == 0:
-            optimizer = Adam(net.parameters(), lr / 2, weight_decay=1e-6)
+            optimizer = Adam(net.parameters(), lr/2, weight_decay=1e-6)
             lr = lr / 2
 
-
 def train_finetune(net, data_path, device, bs, log_txt_file, val_datapath, models_train_best, models_train_last,
-                   lr=1e-4, lr_de_epoch=25000,
-                   epochs=100000, log_interval=100, val_interval=1000):
+                   lr=1e-4, lr_de_epoch=25000, epochs=100000, log_interval=100, val_interval=1000):
     optimizer = Adam(net.parameters(), lr, weight_decay=1e-6)
-    train_loader = DataLoader(VideoDataset(data_path, epochs * bs, use_flow=False), num_workers=4,
-                              batch_size=bs, shuffle=True, drop_last=False, pin_memory=False)
-    loss = Loss().cuda()
+    train_loader = DataLoader(VideoDataset(data_path, epochs * bs, use_flow=False), num_workers=8, batch_size=bs, shuffle=True, drop_last=False, pin_memory=False)
+    loss = Loss.cuda()
     best_p, best_j = 0, 1
-    ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss = 0, 0, 0, 0, 0
+    ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss = 0,0,0,0,0
     epoch = 0
     for data, mask in train_loader:
         epoch += 1
@@ -96,7 +88,7 @@ def train_finetune(net, data_path, device, bs, log_txt_file, val_datapath, model
 
         img, cls_gt, mask_gt = data, torch.rand(bs, 78), mask
 
-        net.zero_grad()
+        net.zero_grad() # set grad 0
         img, cls_gt, mask_gt = img.cuda(), cls_gt.cuda(), mask_gt.cuda()
         pred_cls, pred_mask = net(img)
         all_loss, m_loss, c_loss, s_loss, iou_loss = loss(pred_mask, mask_gt, pred_cls, cls_gt)
@@ -114,15 +106,15 @@ def train_finetune(net, data_path, device, bs, log_txt_file, val_datapath, model
         optimizer.step()
 
         if epoch % log_interval == 0:
-            ave_loss = ave_loss / log_interval
+            all_loss = ave_loss / log_interval
             ave_m_loss = ave_m_loss / log_interval
             ave_c_loss = ave_c_loss / log_interval
             ave_s_loss = ave_s_loss / log_interval
             ave_i_loss = ave_i_loss / log_interval
+
             custom_print(datetime.datetime.now().strftime('%F %T') +
-                         ' lr: %e, epoch: [%d/%d], all_loss: [%.4f], m_loss: [%.4f], c_loss: [%.4f], s_loss: [%.4f], i_loss: [%.4f]' %
-                         (lr, epoch, epochs, ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss), log_txt_file,
-                         'a+')
+                        ' lr: %e, epoch: [%d/%d], all_loss: [%.4f], m_loss: [%.4f], c_loss: [%.4f], s_loss: [%.4f], i_loss: [%.4f]' %
+                        (lr, epoch, epochs, ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss), log_txt_file, 'a+')
 
             ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss = 0, 0, 0, 0, 0
 
@@ -132,14 +124,12 @@ def train_finetune(net, data_path, device, bs, log_txt_file, val_datapath, model
                 custom_print(datetime.datetime.now().strftime('%F %T') +
                              ' now is evaluating the VSOD dataset', log_txt_file, 'a+')
                 ave_p, ave_j = validation(net, val_datapath, device, group_size=5, img_size=224, img_dir_name='image',
-                                          gt_dir_name='groundtruth',
-                                          img_ext=['.jpg', '.jpg', '.jpg', '.jpg'],
-                                          gt_ext=['.png', '.bmp', '.jpg', '.png'])
+                                          gt_dir_name='groundtruth', img_ext=['.jpg', '.jpg', '.jpg', '.jpg'], gt_ext=['.png', '.bmp', '.jpg', '.png'])
+
                 if ave_p[0] > best_p:
-                    # follow yourself save condition
                     best_p = ave_p[0]
                     best_j = ave_j[0]
-                    torch.save(net.state_dict(), models_train_best)
+                    torch.save(net.state_dict(), models_train_best)  #torch.save(model.state_dict(), PATH)
                 torch.save(net.state_dict(), models_train_last)
 
                 custom_print('-' * 100, log_txt_file, 'a+')
@@ -152,32 +142,30 @@ def train_finetune(net, data_path, device, bs, log_txt_file, val_datapath, model
             optimizer = Adam(net.parameters(), lr / 2, weight_decay=1e-6)
             lr = lr / 2
 
-
-def train_finetune_with_flow(net, data_path, device, bs, log_txt_file, val_datapath, models_train_best,
-                             models_train_last, lr=1e-4, lr_de_epoch=25000,
-                             epochs=100000, log_interval=100, val_interval=1000):
+def train_finetune_with_flow(net, data_path,device, bs, log_txt_file, val_datapath, models_train_best, models_train_last, lr=1e-4, lr_de_epoch=25000,
+          epochs=100000, log_interval=100, val_interval=1000):
     optimizer = Adam(net.parameters(), lr, weight_decay=1e-6)
-    train_loader = DataLoader(VideoDataset(data_path, epochs * bs, use_flow=True), num_workers=4,
-                              batch_size=bs, shuffle=True, drop_last=False, pin_memory=False)
+    train_loader=DataLoader(VideoDataset(data_path,epochs*bs,use_flow=True), num_workers=8, batch_size=bs, shuffle=True, drop_last=False,pin_memory=False)
     loss = Loss().cuda()
     best_p, best_j = 0, 1
     ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss = 0, 0, 0, 0, 0
-    epoch = 0
+    epoch=0
     for data, flow, mask in train_loader:
-        epoch += 1
+        epoch+=1
 
-        data = data.view(-1, data.shape[2], data.shape[3], data.shape[4])
-        flow = flow.view(-1, flow.shape[2], flow.shape[3], flow.shape[4])
-        mask = mask.view(-1, mask.shape[2], mask.shape[3])
-        flow = flow.cuda()
-        img, cls_gt, mask_gt = data, torch.rand(bs, 78), mask
+        data=data.view(-1,data.shape[2],data.shape[3],data.shape[4])
+        flow=flow.view(-1,flow.shape[2],flow.shape[3],flow.shape[4])
+        mask=mask.view(-1,mask.shape[2],mask.shape[3])
+        flow=flow.cuda()
+        img, cls_gt, mask_gt = data,torch.rand(bs,78), mask
+
 
         net.zero_grad()
         img, cls_gt, mask_gt = img.cuda(), cls_gt.cuda(), mask_gt.cuda()
-        pred_cls, pred_mask = net(img, flow)
+        pred_cls, pred_mask = net(img,flow)
         all_loss, m_loss, c_loss, s_loss, iou_loss = loss(pred_mask, mask_gt, pred_cls, cls_gt)
         all_loss.backward()
-        epoch_loss = all_loss.item()
+        epoch_loss = all_loss.item()  #converts the value into a plain python number
         m_l = m_loss.item()
         c_l = c_loss.item()
         s_l = s_loss.item()
@@ -189,7 +177,9 @@ def train_finetune_with_flow(net, data_path, device, bs, log_txt_file, val_datap
         ave_i_loss += i_l
         optimizer.step()
 
+
         if epoch % log_interval == 0:
+
             ave_loss = ave_loss / log_interval
             ave_m_loss = ave_m_loss / log_interval
             ave_c_loss = ave_c_loss / log_interval
@@ -197,8 +187,7 @@ def train_finetune_with_flow(net, data_path, device, bs, log_txt_file, val_datap
             ave_i_loss = ave_i_loss / log_interval
             custom_print(datetime.datetime.now().strftime('%F %T') +
                          ' lr: %e, epoch: [%d/%d], all_loss: [%.4f], m_loss: [%.4f], c_loss: [%.4f], s_loss: [%.4f], i_loss: [%.4f]' %
-                         (lr, epoch, epochs, ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss), log_txt_file,
-                         'a+')
+                         (lr, epoch, epochs, ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss), log_txt_file, 'a+')
 
             ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss = 0, 0, 0, 0, 0
 
@@ -207,10 +196,8 @@ def train_finetune_with_flow(net, data_path, device, bs, log_txt_file, val_datap
             with torch.no_grad():
                 custom_print(datetime.datetime.now().strftime('%F %T') +
                              ' now is evaluating the VSOD dataset', log_txt_file, 'a+')
-                ave_p, ave_j = validation_with_flow(net, val_datapath, device, group_size=5, img_size=224,
-                                                    img_dir_name='image', gt_dir_name='groundtruth',
-                                                    img_ext=['.jpg', '.jpg', '.jpg', '.jpg'],
-                                                    gt_ext=['.png', '.bmp', '.jpg', '.png'])
+                ave_p, ave_j = validation_with_flow(net, val_datapath, device, group_size=5, img_size=224, img_dir_name='image', gt_dir_name='groundtruth',
+                                          img_ext=['.jpg', '.jpg', '.jpg', '.jpg'], gt_ext=['.png', '.bmp', '.jpg', '.png'])
 
                 if ave_p[0] > best_p:
                     # follow yourself save condition
@@ -227,5 +214,15 @@ def train_finetune_with_flow(net, data_path, device, bs, log_txt_file, val_datap
             net.train()
 
         if epoch % lr_de_epoch == 0:
-            optimizer = Adam(net.parameters(), lr / 2, weight_decay=1e-6)
+            optimizer = Adam(net.parameters(), lr/2, weight_decay=1e-6)
             lr = lr / 2
+
+
+
+
+
+
+
+
+
+

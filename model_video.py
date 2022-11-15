@@ -7,6 +7,7 @@ import numpy
 from einops import rearrange
 import time
 from transformer import Transformer
+from transformer_2 import Transformer2
 from Intra_MLP import index_points, knn_l2
 
 # vgg choice
@@ -145,12 +146,12 @@ class Model(nn.Module):
             np = self.incr_channel2[k](np)
             newp.append(self.incr_channel2[4](np))
             if k==3:
-              tmp_newp_T3=self.transformer_1(newp[k])
-              newp_T.append(tmp_newp_T3)
+                tmp_newp_T3=self.transformer_1(newp[k])
+                newp_T.append(tmp_newp_T3)
             if k==2:
-              newp_T.append(self.transformer_2(newp[k]))
+                newp_T.append(self.transformer_2(newp[k]))
             if k<2:
-              newp_T.append(None)
+                newp_T.append(None)
 
         # intra-MLP
         point = newp[3].view(newp[3].size(0), newp[3].size(1), -1)
@@ -205,20 +206,18 @@ class Model(nn.Module):
             y4 = self.concat4[k](y4)
 
         y3 = newp_T[2] * g3 + spa_3
-
         for k in range(len(self.concat3)):
             y3 = self.concat3[k](y3)
             if k == 1:
                 y3 = y3 + y4
 
         y2 = newp[1] * g2 + spa_2
-
         for k in range(len(self.concat2)):
             y2 = self.concat2[k](y2)
             if k == 1:
                 y2 = y2 + y3
-        y1 = newp[0] * g1 + spa_1
 
+        y1 = newp[0] * g1 + spa_1
         for k in range(len(self.concat1)):
             y1 = self.concat1[k](y1)
             if k == 1:

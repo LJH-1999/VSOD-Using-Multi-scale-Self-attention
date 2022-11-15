@@ -190,7 +190,7 @@ class VideoDataset(Dataset):
                 os.path.join(self.dir_, 'flow', os.path.split(self.img_list[rd][rd2[i % len(self.img_list[rd])]])[1]))
             cur_gt.append(self.label_list[rd][rd2[i % len(self.img_list[rd])]])
 
-        group_img = []
+        group_img = [] # img
         group_flow = []
         group_gt = []
         for i in range(self.group):
@@ -200,10 +200,10 @@ class VideoDataset(Dataset):
             tmp_img = F.interpolate(tmp_img.unsqueeze(0).permute(0, 3, 1, 2), size=(self.img_size, self.img_size))
             group_img.append(tmp_img)
 
-            tmp_gt = np.array(Image.open(cur_gt[i]).convert('L'))
+            tmp_gt = np.array(Image.open(cur_gt[i]).convert('L')) # gray img
             tmp_gt = torch.from_numpy(tmp_gt.astype(np.float32) / 255.0)
             tmp_gt = F.interpolate(tmp_gt.view(1, tmp_gt.shape[0], tmp_gt.shape[1], 1).permute(0, 3, 1, 2),
-                                   size=(self.img_size, self.img_size)).squeeze()
+                                   size=(self.img_size, self.img_size)).squeeze()  # up/down sampling for tensors
             tmp_gt = tmp_gt.view(1, tmp_gt.shape[0], tmp_gt.shape[1])
             group_gt.append(tmp_gt)
             if self.use_flow == True:
