@@ -3,12 +3,10 @@ from torch import nn
 from torch.nn import init
 import torch.nn.functional as F
 from transformer import Transformer
-from transformer_2 import Transformer2
-from Intra_MLP import index_points, knn_l2
+from Intra_MLP import index_points,knn_l2
 
 # vgg choice
 base = {'vgg': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M']}
-
 
 # vgg16
 def vgg(cfg, i=3, batch_norm=True):
@@ -26,24 +24,17 @@ def vgg(cfg, i=3, batch_norm=True):
             in_channels = v
     return layers
 
-
 def hsp(in_channel, out_channel):
-    layers = nn.Sequential(nn.Conv2d(in_channel, out_channel, 1, 1),
-                           nn.ReLU())
+    layers = nn.Sequential(nn.Conv2d(in_channel, out_channel, 1, 1), nn.ReLU())
     return layers
-
 
 def cls_modulation_branch(in_channel, hiden_channel):
-    layers = nn.Sequential(nn.Linear(in_channel, hiden_channel),
-                           nn.ReLU())
+    layers = nn.Sequential(nn.Linear(in_channel, hiden_channel), nn.ReLU())
     return layers
-
 
 def cls_branch(hiden_channel, class_num):
-    layers = nn.Sequential(nn.Linear(hiden_channel, class_num),
-                           nn.Sigmoid())
+    layers = nn.Sequential(nn.Linear(hiden_channel, class_num), nn.Sigmoid())
     return layers
-
 
 def intra():
     layers = []
@@ -51,16 +42,14 @@ def intra():
     layers += [nn.Sigmoid()]
     return layers
 
-
 def concat_r():
     layers = []
     layers += [nn.Conv2d(512, 512, 1, 1)]
     layers += [nn.ReLU()]
     layers += [nn.Conv2d(512, 512, 3, 1, 1)]
     layers += [nn.ReLU()]
-    layers += [nn.ConvTranspose2d(512, 512, 4, 2, 1)]
+    layers += [nn.ConvTranspose2d(512, 512, 4, 2, 1)] # (C_in, C_out, kernel, stride, padding)      H W * 2
     return layers
-
 
 def concat_1():
     layers = []
@@ -70,14 +59,12 @@ def concat_1():
     layers += [nn.ReLU()]
     return layers
 
-
 def mask_branch():
     layers = []
     layers += [nn.Conv2d(512, 2, 3, 1, 1)]
-    layers += [nn.ConvTranspose2d(2, 2, 8, 4, 2)]
-    layers += [nn.Softmax2d()]
+    layers += [nn.ConvTranspose2d(2, 2, 8, 4, 2)] # H W * 8
+    layers += [nn.Sigmoid()]
     return layers
-
 
 def incr_channel():
     layers = []
@@ -86,7 +73,6 @@ def incr_channel():
     layers += [nn.Conv2d(512, 512, 3, 1, 1)]
     layers += [nn.Conv2d(512, 512, 3, 1, 1)]
     return layers
-
 
 def incr_channel2():
     layers = []
@@ -97,12 +83,10 @@ def incr_channel2():
     layers += [nn.ReLU()]
     return layers
 
-
 def norm(x, dim):
     squared_norm = (x ** 2).sum(dim=dim, keepdim=True)
     normed = x / torch.sqrt(squared_norm)
     return normed
-
 
 def fuse_hsp(x, p, group_size=5):
     t = torch.zeros(group_size, x.size(1))
@@ -117,9 +101,12 @@ def fuse_hsp(x, p, group_size=5):
     return y
 
 class Model(nn.Module):
-    def __init__(self, device, base, incr_channel, incr_channel2, hsp1, hsp2, cls_m, cls, concat_r, concat_1, mask_branch, intra,demo_mode=False):
+    def __init__(self, device, base, incr_channel, incr_channel2, hsp1, hsp2, cls_m, cls, concat_r, concat_1, mask_branch, intra):
         super(Model, self).__init__()
         self.base = nn.ModuleList(base)
+        # self.base_flow=nn.ModuleList(base)
+        base = {'vgg': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M']}
+        # self.base2=nn.ModuleList(vgg(base['vgg']))
         self.sp1 = hsp1
         self.sp2 = hsp2
         self.cls_m = cls_m
@@ -135,32 +122,52 @@ class Model(nn.Module):
         self.device = device
         self.group_size = 5
         self.intra = nn.ModuleList(intra)
-        self.transformer_1=Transformer(512,4,4,782,group=self.group_size)
-        self.transformer_2=Transformer2(512,4,4,782,group=self.group_size)
-        self.demo_mode=demo_mode
+        self.transformer_1 = Transformer(512, 4, 4, 782, group=self.group_size)
+        self.transformer_2 = Transformer(512, 4, 4, 782, group=self.group_size)
 
-    def forward(self, x):
+    def forward(self, x, flow):
         # backbone, p is the pool2, 3, 4, 5
+
         p = list()
         for k in range(len(self.base)):
             x = self.base[k](x)
             if k in self.extract:
                 p.append(x)
 
+        p_flow = list()
+        for k in range(len(self.base)):
+            flow = self.base[k](flow)
+            if k in self.extract:
+                p_flow.append(flow)
+
         # increase the channel
+
         newp = list()
+        newp_flow = list()
+
         newp_T = list()
+        newp_flow_T = list()
         for k in range(len(p)):
-            np = self.incr_channel1[k](p[k])
+
+            if k >= 2:
+                np = self.incr_channel1[k](p[k] * p_flow[k])
+            else:
+                np = self.incr_channel1[k](p[k])
             np = self.incr_channel2[k](np)
+            np_flow = self.incr_channel1[k](p_flow[k])
+            np_flow = self.incr_channel2[k](np_flow)
             newp.append(self.incr_channel2[4](np))
+            newp_flow.append(self.incr_channel2[4](np_flow))
             if k == 3:
                 tmp_newp_T3 = self.transformer_1(newp[k])
                 newp_T.append(tmp_newp_T3)
+                newp_flow_T.append(self.transformer_1(newp_flow[k]))
             if k == 2:
                 newp_T.append(self.transformer_2(newp[k]))
+                newp_flow_T.append(self.transformer_2(newp_flow[k]))
             if k < 2:
                 newp_T.append(None)
+                newp_flow_T.append(None)
 
         # intra-MLP
         point = newp[3].view(newp[3].size(0), newp[3].size(1), -1)
@@ -215,6 +222,7 @@ class Model(nn.Module):
             y4 = self.concat4[k](y4)
 
         y3 = newp_T[2] * g3 + spa_3
+        tmp = y3
         for k in range(len(self.concat3)):
             y3 = self.concat3[k](y3)
             if k == 1:
@@ -232,38 +240,41 @@ class Model(nn.Module):
             if k == 1:
                 y1 = y1 + y2
         y = y1
-        if self.demo_mode:
-            tmp = F.interpolate(y1, size=[14, 14], mode='bilinear')
-            tmp = tmp.permute(0, 2, 3, 1).contiguous().reshape(tmp.shape[0] * tmp.shape[2] * tmp.shape[3], tmp.shape[1])
-            tmp = tmp / torch.norm(tmp, p=2, dim=1).unsqueeze(1)
-            feat2 = (tmp @ tmp.t())
-            feat = F.interpolate(y, size=[14, 14], mode='bilinear')
+
+        '''tmp=tmp.permute(0,2,3,1).contiguous().reshape(tmp.shape[0]*tmp.shape[2]*tmp.shape[3],tmp.shape[1])
+        tmp=tmp/torch.norm(tmp,p=2,dim=1).unsqueeze(1)
+        feat=(tmp@tmp.t())
+        print(feat.shape)'''
+        # feat=F.interpolate(y, size=[224,224], mode='bilinear')
 
         # decoder
         for k in range(len(self.mask)):
             y = self.mask[k](y)
         mask_pred = y[:, 0, :, :]
-        if self.demo_mode:
-            return cls_pred, mask_pred, feat, feat2
-        else:
-            return cls_pred, mask_pred
 
-def build_model(device,demo_mode=False):
+        return cls_pred, mask_pred
+
+
+# build the whole network
+def build_model(device):
     return Model(device,
                  vgg(base['vgg']),
                  incr_channel(),
                  incr_channel2(),
                  hsp(512, 64),
-                 hsp(64**2, 32),
-                 cls_modulation_branch(32**2, 512),
+                 hsp(64 ** 2, 32),
+                 cls_modulation_branch(32 ** 2, 512),
                  cls_branch(512, 78),
                  concat_r(),
                  concat_1(),
                  mask_branch(),
-                 intra(),demo_mode)
+                 intra())
 
+
+# weight init
 def xavier(param):
     init.xavier_uniform_(param)
+
 
 def weights_init(m):
     if isinstance(m, nn.Conv2d):

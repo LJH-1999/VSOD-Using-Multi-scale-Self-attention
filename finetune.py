@@ -2,17 +2,9 @@ import os
 import torch
 import numpy as np
 import random
-from pycocotools import coco
-import queue
-import threading
 from model_video import build_model, weights_init
 from tools import custom_print
 from train import train_finetune, train_finetune_with_flow
-from val import validation
-import time
-import datetime
-import collections
-from torch.utils.data import DataLoader
 import argparse
 torch.backends.cudnn.benchmark = True
 

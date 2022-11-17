@@ -2,10 +2,6 @@ import torch
 from torch import nn
 from torch.nn import init
 import torch.nn.functional as F
-from torch.optim import Adam
-import numpy
-from einops import rearrange
-import time
 from transformer import Transformer
 from transformer_2 import Transformer2
 from Intra_MLP import index_points, knn_l2
