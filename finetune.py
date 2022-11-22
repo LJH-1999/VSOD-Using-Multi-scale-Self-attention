@@ -27,7 +27,7 @@ if __name__ == '__main__':
     parser.add_argument('--group_size', default=5, help="group size")
     parser.add_argument('--epochs', default=100000, help="epoch")
     parser.add_argument('--train_datapath', default='./DAVIS_FBMS/DAVIS_FBMS', help="training dataset")
-    parser.add_argument('--val_datapath', default='./VSOD testset/DAVIS_test/DAVIS', help="training dataset")
+    parser.add_argument('--val_datapath', default='./vsod_testset/DAVIS_test/DAVIS', help="training dataset")
     args = parser.parse_args()
 
     train_datapath = args.train_datapath

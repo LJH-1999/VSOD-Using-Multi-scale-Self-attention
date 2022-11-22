@@ -10,13 +10,13 @@ from data_processed import VideoDataset
 def train(net, device, q, log_txt_file, val_datapath, models_train_best, models_train_last, lr=1e-4, lr_de_epoch=25000,
           epochs=100000, log_interval=100, val_interval=1000):
     optimizer = Adam(net.parameters(), lr, weight_decay=1e-6)
-    loss = Loss.cuda()
+    loss = Loss().cuda()
     best_p, best_j = 0,1
     ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss = 0, 0, 0, 0, 0
     for epoch in range(1, epochs+1):
         img, cls_gt, mask_gt = q.get()
         net.zero_grad()
-        img, cls_gt, mask_gt = img.cuda(), cls_gt.cuda, mask_gt.cuda()
+        img, cls_gt, mask_gt = img.cuda(), cls_gt.cuda(), mask_gt.cuda()
 
         pred_cls, pred_mask = net(img)
         all_loss, m_loss, c_loss, s_loss, iou_loss = loss(pred_mask, mask_gt, pred_cls, cls_gt)
@@ -75,10 +75,10 @@ def train(net, device, q, log_txt_file, val_datapath, models_train_best, models_
 def train_finetune(net, data_path, device, bs, log_txt_file, val_datapath, models_train_best, models_train_last,
                    lr=1e-4, lr_de_epoch=25000, epochs=100000, log_interval=100, val_interval=1000):
     optimizer = Adam(net.parameters(), lr, weight_decay=1e-6)
-    train_loader = DataLoader(VideoDataset(data_path, epochs * bs, use_flow=False), num_workers=8, batch_size=bs, shuffle=True, drop_last=False, pin_memory=False)
-    loss = Loss.cuda()
+    train_loader = DataLoader(VideoDataset(data_path, epochs * bs, use_flow=False), num_workers=12, batch_size=bs, shuffle=True, drop_last=False, pin_memory=False)
+    loss = Loss().cuda()
     best_p, best_j = 0, 1
-    ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss = 0,0,0,0,0
+    ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss = 0, 0, 0, 0, 0
     epoch = 0
     for data, mask in train_loader:
         epoch += 1
@@ -106,7 +106,7 @@ def train_finetune(net, data_path, device, bs, log_txt_file, val_datapath, model
         optimizer.step()
 
         if epoch % log_interval == 0:
-            all_loss = ave_loss / log_interval
+            ave_loss = ave_loss / log_interval
             ave_m_loss = ave_m_loss / log_interval
             ave_c_loss = ave_c_loss / log_interval
             ave_s_loss = ave_s_loss / log_interval
@@ -145,7 +145,7 @@ def train_finetune(net, data_path, device, bs, log_txt_file, val_datapath, model
 def train_finetune_with_flow(net, data_path,device, bs, log_txt_file, val_datapath, models_train_best, models_train_last, lr=1e-4, lr_de_epoch=25000,
           epochs=100000, log_interval=100, val_interval=1000):
     optimizer = Adam(net.parameters(), lr, weight_decay=1e-6)
-    train_loader=DataLoader(VideoDataset(data_path,epochs*bs,use_flow=True), num_workers=8, batch_size=bs, shuffle=True, drop_last=False,pin_memory=False)
+    train_loader=DataLoader(VideoDataset(data_path,epochs*bs,use_flow=True), num_workers=12, batch_size=bs, shuffle=True, drop_last=False,pin_memory=False)
     loss = Loss().cuda()
     best_p, best_j = 0, 1
     ave_loss, ave_m_loss, ave_c_loss, ave_s_loss, ave_i_loss = 0, 0, 0, 0, 0

@@ -136,7 +136,7 @@ class Model(nn.Module):
         self.group_size = 5
         self.intra = nn.ModuleList(intra)
         self.transformer_1=Transformer(512,4,4,782,group=self.group_size)
-        self.transformer_2=Transformer2(512,4,4,782,group=self.group_size)
+        self.transformer_2=Transformer(512,4,4,782,group=self.group_size)
         self.demo_mode=demo_mode
 
     def forward(self, x):

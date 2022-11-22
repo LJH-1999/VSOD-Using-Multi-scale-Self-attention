@@ -74,7 +74,7 @@ class Loss(nn.Module):
         m_loss = self.loss_wbce(x, label) * self.w_wbce
         c_loss = self.loss_cls(x_cls, label_cls) * self.w_cls
         s_loss = self.loss_s(x, label) * self.w_smooth
-        iou_loss = self.loss_i(x, label) * self.w_iou
+        iou_loss = self.loss_iou(x, label) * self.w_iou
         loss = m_loss + c_loss + s_loss + iou_loss
 
         return loss, m_loss, c_loss, s_loss, iou_loss

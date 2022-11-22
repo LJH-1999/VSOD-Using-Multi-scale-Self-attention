@@ -20,6 +20,7 @@ def setup_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
 setup_seed(3407)
+
 if __name__ == '__main__':
     # train_val_config
     parser = argparse.ArgumentParser()
@@ -37,10 +38,10 @@ if __name__ == '__main__':
     parser.add_argument('--val_interval', default=1000, help='val interval')
     args = parser.parse_args()
 
-    annotation_file = '/home/jiahao/PycharmProjects/UFO/coco/annotations/instances_train2017.json'
+    annotation_file = './coco/annotations/instances_train2017.json'
     coco_item = coco.COCO(annotation_file=annotation_file)
 
-    train_datapath = '/home/jiahao/PycharmProjects/UFO/coco/train2017/'
+    train_datapath = './coco/train2017/'
 
     val_datapath = ['./testset/iCoseg8',
                     './testset/MSRC7',
@@ -51,7 +52,7 @@ if __name__ == '__main__':
     npy = args.npy_path
 
     # project config
-    project_name = 'UFO'
+    project_name = 'baseline'
     device = torch.device('cuda:0')
     img_size = args.img_size
     lr = args.lr
@@ -96,9 +97,24 @@ if __name__ == '__main__':
                           args=(coco_item, train_datapath, npy, q, batch_size, group_size, img_size))
     p3 = threading.Thread(target=train_data_producer,
                           args=(coco_item, train_datapath, npy, q, batch_size, group_size, img_size))
+    p4 = threading.Thread(target=train_data_producer,
+                          args=(coco_item, train_datapath, npy, q, batch_size, group_size, img_size))
+    p5 = threading.Thread(target=train_data_producer,
+                          args=(coco_item, train_datapath, npy, q, batch_size, group_size, img_size))
+    p6 = threading.Thread(target=train_data_producer,
+                          args=(coco_item, train_datapath, npy, q, batch_size, group_size, img_size))
+    p7 = threading.Thread(target=train_data_producer,
+                          args=(coco_item, train_datapath, npy, q, batch_size, group_size, img_size))
+    p8 = threading.Thread(target=train_data_producer,
+                          args=(coco_item, train_datapath, npy, q, batch_size, group_size, img_size))
     p1.start()
     p2.start()
     p3.start()
+    p4.start()
+    p5.start()
+    p6.start()
+    p7.start()
+    p8.start()
     time.sleep(2)
 
     train(net, device, q, log_txt_file, val_datapath, models_train_best, models_train_last, lr, lr_de, epochs, log_interval, val_interval)
