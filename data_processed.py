@@ -1,17 +1,17 @@
 import torch
-from torchvision import transforms
+from pycocotools import coco
 import copy
-import random
 import os
 import numpy as np
-from PIL import Image
 from imageio import imread
-from torch.utils.data import Dataset
-from torchvision.transforms import Compose, CenterCrop, ToTensor, Resize
+from PIL import Image
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
+from torchvision.transforms import functional as tff
 import torchvision.transforms as transforms
-import cv2
+from torch.utils.data import Dataset
+import random
+import augument.trans as mt
 
 
 def filt_small_instance(coco_item, pixthreshold=4000, imgNthreshold=5):
@@ -41,80 +41,86 @@ def filt_small_instance(coco_item, pixthreshold=4000, imgNthreshold=5):
     return new_dict
 
 # no data argumentation
-def train_data_producer(coco_item, datapath, npy, q, batch_size=10, group_size=5, img_size=224):
-    img_transform = transforms.Compose([transforms.Resize((img_size, img_size)),  transforms.ToTensor(),
-                                        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
-    gt_transform = transforms.Compose([transforms.Resize((img_size, img_size)), transforms.ToTensor()])
-    img_transform_gray = transforms.Compose([transforms.Resize((img_size, img_size)), transforms.ToTensor(),
-                                             transforms.Normalize(mean=[0.449], std=[0.226])])
-    if os.path.exists(npy):
-        # list_dict = np.load(npy).item()
-        list_dict = np.load(npy, allow_pickle=True).item()
-    else:
-        list_dict = filt_small_instance(coco_item, pixthreshold=4000, imgNthreshold=100)
-    catid2label = {}
-    n = 0
-    for catid in list_dict:
-        catid2label[catid] = n
-        n = n + 1
-    while 1:
-        rgb = torch.zeros(batch_size * group_size, 3, img_size, img_size)
-        cls_labels = torch.zeros(batch_size, 78)
-        mask_labels = torch.zeros(batch_size * group_size, img_size, img_size)
-        if batch_size > len(list_dict):
-            remainN = batch_size - len(list_dict)
-            batch_catid = random.sample(list_dict.keys(), remainN) + random.sample(list_dict, len(list_dict))
-        else:
-            batch_catid = random.sample(list_dict.keys(), batch_size)
-        group_n = 0
-        img_n = 0
-        for catid in batch_catid:
-            imgids = random.sample(list_dict[catid], group_size)
-            co_catids = []
-            anns = coco_item.imgToAnns[imgids[0]]
+class CoCoDataset(torch.utils.data.Dataset):
+    """coco 数据集"""
+    def __init__(self, data_path, npy_path, anf_path):
+        # 检测路径
+        assert os.path.exists(data_path), "Data path '{}' not found".format(data_path)
+        assert os.path.exists(npy_path), "Npy path '{}' not found".format(npy_path)
+        assert os.path.exists(anf_path), "Anf path '{}' not found".format(anf_path)
+        self.data_path = data_path
+        self.list_dict = np.load(npy_path, allow_pickle=True).item()
+        self.anf_path = anf_path
+        self.catid2label = dict()
+        self.coco = coco.COCO(annotation_file=anf_path)
+        for i, cat_id in enumerate(self.list_dict):
+            self.catid2label[cat_id] = i
+        self.idx2catid = [i for i in self.list_dict]
+        self.img_size = 224
+        self.group_size = 5                 # 一次取一个group的数据
+
+        self.trans = mt.Compose([
+            mt.Resize((self.img_size, self.img_size)),
+            mt.ToTensor(),
+            mt.Normalize()
+        ])
+
+    def __getitem__(self, idx):
+        """
+        拿数据
+        :param idx:  group id
+        :return:
+        """
+        cat_id = self.idx2catid[idx]
+        img_ids = random.sample(self.list_dict[cat_id], self.group_size)
+
+        # 处理每个group的第一张图片
+        cls_labels = torch.zeros(78)
+        anns = self.coco.imgToAnns[img_ids[0]]
+        cat_ids_mix = set()
+        for ann in anns:
+            if (ann['iscrowd'] == 0) and (ann['area'] > 4000):  # 如果这个标注信息满足这样的需求
+                cat_ids_mix.add(ann['category_id'])     # 就把他加入 co_cat_mix
+
+        # 对所有图片都标注的地方求交集，这里选择了跟源代码不同的写法，用set完成了
+        for img_id in img_ids[1:]:
+            cat_ids_tmp = set()
+            anns = self.coco.imgToAnns[img_id]   # 获取当前图片的标注信息
             for ann in anns:
                 if (ann['iscrowd'] == 0) and (ann['area'] > 4000):
-                    co_catids.append(ann['category_id'])
-            co_catids_backup = copy.deepcopy(co_catids)
-            for imgid in imgids[1:]:
-                img_catids = []
-                anns = coco_item.imgToAnns[imgid]
-                for ann in anns:
-                    if (ann['iscrowd'] == 0) and (ann['area'] > 4000):
-                        img_catids.append(ann['category_id'])
-                for co_catid in co_catids_backup:
-                    if co_catid not in img_catids:
-                        co_catids.remove(co_catid)
-                co_catids_backup = copy.deepcopy(co_catids)
-            for co_catid in co_catids:
-                cls_labels[group_n, catid2label[co_catid]] = 1
-            for imgid in imgids:
-                path = datapath + '%012d.jpg' % imgid
-                img = Image.open(path)
-                if img.mode == 'RGB':
-                    img = img_transform(img)
-                else:
-                    img = img_transform_gray(img)
-                anns = coco_item.imgToAnns[imgid]
-                mask = None
-                for ann in anns:
-                    if ann['category_id'] in co_catids:
-                        if mask is None:
-                            mask = coco_item.annToMask(ann)
-                        else:
-                            mask = mask + coco_item.annToMask(ann)
-                mask[mask > 0] = 255
-                mask = Image.fromarray(mask)
-                mask = gt_transform(mask)
-                mask[mask > 0.5] = 1
-                mask[mask <= 0.5] = 0
-                rgb[img_n, :, :, :] = copy.deepcopy(img)
-                mask_labels[img_n, :, :] = copy.deepcopy(mask)
-                img_n = img_n + 1
-            group_n = group_n + 1
-        idx = mask_labels[:, :, :] > 1
-        mask_labels[idx] = 1
-        q.put([rgb, cls_labels, mask_labels])
+                    cat_ids_tmp.add(ann['category_id'])
+            cat_ids_mix = cat_ids_mix & cat_ids_tmp     # 求交集
+
+        for co_cat_id in cat_ids_mix:
+            cls_labels[self.catid2label[co_cat_id]] = 1
+
+        imgs = torch.zeros((0, 3, self.img_size, self.img_size))
+        mask_labels = torch.zeros((0, self.img_size, self.img_size))
+        for imgid in img_ids:
+            im_path = self.data_path + '%012d.jpg' % imgid
+            img = Image.open(im_path)
+
+            anns = self.coco.imgToAnns[imgid]
+            mask = None
+            for ann in anns:
+                if ann['category_id'] in cat_ids_mix:
+                    if mask is None:
+                        mask = self.coco.annToMask(ann)
+                    else:
+                        mask = mask + self.coco.annToMask(ann)
+            mask[mask > 0] = 255
+            mask = Image.fromarray(mask)
+            img, mask = self.trans(img, mask)
+            img = img.unsqueeze(0)
+            mask[mask > 0.5] = 1
+            mask[mask <= 0.5] = 0
+            mask_labels = torch.concat((mask_labels, mask))
+            imgs = torch.concat((imgs, img))
+
+        return imgs, cls_labels, mask_labels
+
+    def __len__(self):
+        return len(self.idx2catid)
 
 
 def img_normalize(image):
@@ -126,6 +132,15 @@ def img_normalize(image):
                 / np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape((1, 1, 3))
     return image
 
+def generate_batch(batch_data):
+    imgs_list = []
+    cls_labels_list = []
+    mask_labels_list = []
+    for bd in batch_data:
+        imgs_list.append(bd[0])
+        cls_labels_list.append(bd[1])
+        mask_labels_list.append(bd[2])
+    return torch.concat(imgs_list), torch.stack(cls_labels_list), torch.concat(mask_labels_list)
 
 davis_fbms = ['bear', 'bear01', 'bear02', 'bmx-bumps', 'boat', 'breakdance-flare', 'bus', 'car-turn', 'cars2', 'cars3',
               'cars6', 'cars7', 'cars8', 'cars9', 'cats02', 'cats04', 'cats05', 'cats07', 'dance-jump', 'dog-agility',
@@ -221,3 +236,9 @@ class VideoDataset(Dataset):
         else:
             return group_img, group_gt
 
+if __name__ == '__main__':
+    npy = './utils/new_cat2imgid_dict4000.npy'
+    dp = '/root/autodl-tmp/coco2017/train2017/'
+    pics_fp = dp + os.listdir(dp)[5]
+
+    anp = '/root/autodl-tmp/coco2017/annotations/instances_train2017.json'

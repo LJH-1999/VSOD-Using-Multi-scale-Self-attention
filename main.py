@@ -1,17 +1,19 @@
 import os
+import random
 import torch
+import numpy as np
 from pycocotools import coco
 import queue
 import threading
+
+from torch.utils.data import DataLoader
+
 from model_image import build_model, weights_init
 from tools import custom_print
-from data_processed import train_data_producer
+from data_processed import CoCoDataset, generate_batch
 from train import train
 import time
 import argparse
-import random
-import numpy as np
-
 torch.backends.cudnn.benchmark = True
 
 def setup_seed(seed):
@@ -89,32 +91,16 @@ if __name__ == '__main__':
     # continute load checkpoint
     # net.load_state_dict(torch.load('./models/SSNM-Coseg_last.pth', map_location='cuda:0'))
 
-    q = queue.Queue(maxsize=40)
+    npy = './utils/new_cat2imgid_dict4000.npy'
+    c = CoCoDataset(data_path=train_datapath, npy_path=npy, anf_path=annotation_file)
 
-    p1 = threading.Thread(target=train_data_producer,
-                          args=(coco_item, train_datapath, npy, q, batch_size, group_size, img_size))
-    p2 = threading.Thread(target=train_data_producer,
-                          args=(coco_item, train_datapath, npy, q, batch_size, group_size, img_size))
-    p3 = threading.Thread(target=train_data_producer,
-                          args=(coco_item, train_datapath, npy, q, batch_size, group_size, img_size))
-    p4 = threading.Thread(target=train_data_producer,
-                          args=(coco_item, train_datapath, npy, q, batch_size, group_size, img_size))
-    p5 = threading.Thread(target=train_data_producer,
-                          args=(coco_item, train_datapath, npy, q, batch_size, group_size, img_size))
-    p6 = threading.Thread(target=train_data_producer,
-                          args=(coco_item, train_datapath, npy, q, batch_size, group_size, img_size))
-    p7 = threading.Thread(target=train_data_producer,
-                          args=(coco_item, train_datapath, npy, q, batch_size, group_size, img_size))
-    p8 = threading.Thread(target=train_data_producer,
-                          args=(coco_item, train_datapath, npy, q, batch_size, group_size, img_size))
-    p1.start()
-    p2.start()
-    p3.start()
-    p4.start()
-    p5.start()
-    p6.start()
-    p7.start()
-    p8.start()
-    time.sleep(2)
+    train_dataloader = DataLoader(c,
+                                  batch_size=8,
+                                  shuffle=True,
+                                  num_workers=12,
+                                  drop_last=False,
+                                  collate_fn=generate_batch
+                                  )
 
-    train(net, device, q, log_txt_file, val_datapath, models_train_best, models_train_last, lr, lr_de, epochs, log_interval, val_interval)
+    train(net, device, train_dataloader, log_txt_file, val_datapath, models_train_best, models_train_last, lr, lr_de,
+          epochs, log_interval, val_interval)
